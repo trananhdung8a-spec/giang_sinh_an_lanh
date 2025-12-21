@@ -98,7 +98,7 @@
         function createCustomTexture(type) {
             const canvas = document.createElement('canvas');
             canvas.width = 128; canvas.height = 128;
-            const ctx = canvas.getContext('2d');SS
+            const ctx = canvas.getContext('2d');
             const cx = 64, cy = 64;
 
             if (type === 'gold_glow') {
@@ -482,7 +482,7 @@
             const canvas = document.getElementById('camera-preview');
             const ctx = canvas.getContext('2d');
             
-            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+            const hands = new window.Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
             hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
             hands.onResults(results => {
@@ -518,8 +518,8 @@
                 }
             });
 
-            const cameraUtils = new Camera(video, {
-                onFrame: async () => { await hands.send({image: video}); }, width: 320, height: 240
+            const cameraUtils = new window.Camera(video, {
+                onFrame: async () => { await hands.send({image: video}); }, width: 640, height: 480
             });
             cameraUtils.start();
         }
