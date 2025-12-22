@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Magic Christmas - Fixed Zoom</title>
+    <title>Magic Christmas - 3D Sphere 360</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -14,7 +14,7 @@
         body { margin: 0; overflow: hidden; background-color: #000000; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         #canvas-container { width: 100%; height: 100vh; display: block; }
         #ui-layer { position: absolute; bottom: 30px; width: 100%; text-align: center; pointer-events: none; z-index: 100; }
-        .guide { color: rgba(255, 255, 255, 0.6); font-size: 13px; margin-bottom: 20px; text-shadow: 0 2px 4px black; }
+        .guide { color: rgba(255, 255, 255, 0.7); font-size: 13px; margin-bottom: 20px; text-shadow: 0 2px 4px black; }
         button { pointer-events: auto; cursor: pointer; background: linear-gradient(to bottom, #D32F2F, #8B0000); color: #FFF; border: 2px solid #FFD700; padding: 15px 50px; border-radius: 30px; font-weight: 800; font-size: 16px; box-shadow: 0 0 30px rgba(255, 0, 0, 0.6); animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
         #camera-preview { position: absolute; top: 15px; right: 15px; width: 110px; height: auto; border: 2px solid rgba(255,0,0,0.5); transform: scaleX(-1); opacity: 0.8; border-radius: 8px; z-index: 1000; }
@@ -23,7 +23,7 @@
 </head>
 <body>
     <div id="ui-layer">
-        <div class="guide">🖐 <b>Open:</b> Xoay | 🤏 <b>Pinch:</b> Xem ảnh | ✊ <b>Fist:</b> Cây | 🫶 <b>Heart:</b> Tim</div>
+        <div class="guide">🖐 <b>Mở tay:</b> Xoay 360° | 🤏 <b>Chụm:</b> Phóng to | ✊ <b>Nắm:</b> Cây thông</div>
         <button id="btnStart" onclick="startSystem()">START MAGIC</button>
     </div>
     <div id="copyright">© by vandiep</div>
@@ -59,10 +59,10 @@
         }
 
         const textures = { gold: createCustomTexture('gold_glow'), red: createCustomTexture('red_light'), gift: createCustomTexture('gift_red') };
-        const CONFIG = { goldCount: 1800, redCount: 250, giftCount: 120, explodeRadius: 65, photoOrbitRadius: 22, treeHeight: 70, treeBaseRadius: 35 };
+        const CONFIG = { goldCount: 1800, redCount: 250, giftCount: 120, explodeRadius: 65, photoOrbitRadius: 35, treeHeight: 70, treeBaseRadius: 35 };
 
         let scene, camera, renderer, groupGold, groupRed, groupGift, photoMeshes = [], titleMesh, starMesh, loveMesh;
-        let state = 'TREE', selectedIndex = 0, handX = 0.5;
+        let state = 'TREE', selectedIndex = 0, handX = 0.5, handY = 0.5;
 
         function init3D() {
             scene = new THREE.Scene();
@@ -81,7 +81,7 @@
         }
 
         function createParticleSystem(type, count, size) {
-            const pTree = [], pExplode = [], pHeart = [], pos = [], sizes = [];
+            const pTree = [], pExplode = [], pHeart = [], pos = [];
             for(let i=0; i<count; i++) {
                 const h = Math.random()*CONFIG.treeHeight, y = h - CONFIG.treeHeight/2;
                 const r = (1-(h/CONFIG.treeHeight)) * CONFIG.treeBaseRadius * (type==='gold'?Math.sqrt(Math.random()):1);
@@ -106,10 +106,12 @@
         }
 
         function createPhotos() {
-            const geo = new THREE.PlaneGeometry(10, 10);
+            const geo = new THREE.PlaneGeometry(12, 12);
             photoTextures.forEach((tex, i) => {
                 const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
-                mesh.visible = false; scene.add(mesh); photoMeshes.push(mesh);
+                mesh.visible = false; 
+                scene.add(mesh); 
+                photoMeshes.push(mesh);
             });
         }
 
@@ -129,22 +131,34 @@
             scene.add(groupGold); scene.add(groupRed); scene.add(groupGift);
         }
 
-        function updateParticles(group, targetKey, speed, rotY) {
+        function updateParticles(group, targetKey, speed, rotY, rotX) {
             const pos = group.geometry.attributes.position.array;
             const target = group.geometry.userData[targetKey];
             for(let i=0; i<pos.length; i++) pos[i] += (target[i] - pos[i]) * speed;
             group.geometry.attributes.position.needsUpdate = true;
-            if (targetKey === 'tree') group.rotation.y += 0.005;
-            else group.rotation.y += (rotY - group.rotation.y) * 0.1;
+            
+            if (targetKey === 'tree') {
+                group.rotation.y += 0.005;
+                group.rotation.x *= 0.9;
+            } else {
+                // Xoay theo bàn tay 360 độ
+                group.rotation.y += (rotY - group.rotation.y) * 0.1;
+                group.rotation.x += (rotX - group.rotation.x) * 0.1;
+            }
         }
 
         function animate() {
             requestAnimationFrame(animate);
-            const time = Date.now() * 0.001, rotY = (handX - 0.5) * 10;
+            const time = Date.now() * 0.001;
+            
+            // Tính toán góc xoay từ tọa độ tay (Oxyz)
+            const targetRotY = (handX - 0.5) * 6; // Xoay ngang
+            const targetRotX = (handY - 0.5) * 4; // Xoay dọc
+
             const targetKey = state === 'TREE' ? 'tree' : (state === 'HEART' ? 'heart' : 'explode');
-            updateParticles(groupGold, targetKey, 0.1, rotY);
-            updateParticles(groupRed, targetKey, 0.1, rotY);
-            updateParticles(groupGift, targetKey, 0.1, rotY);
+            updateParticles(groupGold, targetKey, 0.1, targetRotY, targetRotX);
+            updateParticles(groupRed, targetKey, 0.1, targetRotY, targetRotX);
+            updateParticles(groupGift, targetKey, 0.1, targetRotY, targetRotX);
 
             if (state === 'TREE') {
                 titleMesh.visible = starMesh.visible = true; loveMesh.visible = false;
@@ -154,28 +168,35 @@
                 photoMeshes.forEach(m => m.visible = false);
             } else if (state === 'EXPLODE' || state === 'PHOTO') {
                 titleMesh.visible = starMesh.visible = loveMesh.visible = false;
-                
-                // --- LOGIC QUAN TRỌNG: TÌM ẢNH GẦN NHẤT ---
                 let minZ = 1000, nearIdx = selectedIndex;
 
                 photoMeshes.forEach((m, i) => {
-                    const angle = groupGold.rotation.y + i * (Math.PI*2/10);
-                    const tx = Math.sin(angle)*CONFIG.photoOrbitRadius, tz = Math.cos(angle)*CONFIG.photoOrbitRadius;
-                    
                     if (state === 'EXPLODE') {
                         m.visible = true;
-                        m.position.lerp(new THREE.Vector3(tx, Math.sin(time+i)*2, tz), 0.1);
-                        m.scale.lerp(new THREE.Vector3(1,1,1), 0.1);
-                        m.lookAt(camera.position);
                         
-                        // Tính khoảng cách tới Camera (Z càng nhỏ trong Three.js camera mặc định càng gần)
-                        // Hoặc đơn giản là tính khoảng cách vector
+                        // --- LOGIC HÌNH CẦU PHÂN BỔ MỌI HƯỚNG ---
+                        const phi = Math.acos(-1 + (2 * i) / photoMeshes.length);
+                        const theta = Math.sqrt(photoMeshes.length * Math.PI) * phi;
+                        
+                        // Tọa độ gốc trên mặt cầu
+                        let tx = CONFIG.photoOrbitRadius * Math.cos(theta) * Math.sin(phi);
+                        let ty = CONFIG.photoOrbitRadius * Math.sin(theta) * Math.sin(phi);
+                        let tz = CONFIG.photoOrbitRadius * Math.cos(phi);
+
+                        // Tạo Vector và xoay theo trục của các hạt
+                        const pos = new THREE.Vector3(tx, ty, tz);
+                        pos.applyEuler(groupGold.rotation);
+
+                        m.position.lerp(pos, 0.1);
+                        m.lookAt(camera.position);
+                        m.scale.lerp(new THREE.Vector3(1,1,1), 0.1);
+                        
                         let dist = m.position.distanceTo(camera.position);
                         if(dist < minZ) { minZ = dist; nearIdx = i; }
                     } else if (state === 'PHOTO') {
                         if (i === selectedIndex) {
                             m.visible = true;
-                            m.position.lerp(new THREE.Vector3(0, 0, 75), 0.1);
+                            m.position.lerp(new THREE.Vector3(0, 0, 85), 0.1);
                             m.scale.lerp(new THREE.Vector3(5, 5, 5), 0.1);
                             m.lookAt(camera.position);
                         } else {
@@ -184,8 +205,6 @@
                         }
                     }
                 });
-                
-                // Chỉ cập nhật ảnh đang chọn khi đang ở chế độ xoay
                 if(state === 'EXPLODE') selectedIndex = nearIdx;
             }
             renderer.render(scene, camera);
@@ -193,28 +212,44 @@
 
         async function startSystem() {
             document.getElementById('btnStart').style.display = 'none';
-            bgMusic.play();
+            bgMusic.play().catch(e => console.log("Audio play failed"));
             init3D();
             const video = document.querySelector('.input_video');
             const canvas = document.getElementById('camera-preview');
             const ctx = canvas.getContext('2d');
-            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+            
+            const hands = new window.Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
             hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            
             hands.onResults(results => {
-                ctx.clearRect(0,0,canvas.width, canvas.height); ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                ctx.clearRect(0,0,canvas.width, canvas.height); 
+                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                
                 if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                     if (results.multiHandLandmarks.length === 2) {
                         const h1 = results.multiHandLandmarks[0], h2 = results.multiHandLandmarks[1];
                         if (Math.hypot(h1[8].x-h2[8].x, h1[8].y-h2[8].y) < 0.15) { state = 'HEART'; return; }
                     }
-                    const lm = results.multiHandLandmarks[0]; handX = lm[9].x;
+                    
+                    const lm = results.multiHandLandmarks[0]; 
+                    handX = lm[9].x; 
+                    handY = lm[9].y; // Cập nhật cả X và Y để xoay 3D
+
                     const tips = [8,12,16,20], wrist = lm[0];
                     let d = 0; tips.forEach(i => d += Math.hypot(lm[i].x-wrist.x, lm[i].y-wrist.y));
                     const pinch = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
-                    if (d/4 < 0.25) state = 'TREE'; else if (pinch < 0.06) state = 'PHOTO'; else state = 'EXPLODE';
+                    
+                    if (d/4 < 0.25) state = 'TREE'; 
+                    else if (pinch < 0.06) state = 'PHOTO'; 
+                    else state = 'EXPLODE';
                 } else state = 'TREE';
             });
-            new Camera(video, { onFrame: async () => { await hands.send({image: video}); }, width: 640, height: 480 }).start();
+
+            const cam = new window.Camera(video, {
+                onFrame: async () => { await hands.send({image: video}); },
+                width: 640, height: 480
+            });
+            cam.start();
         }
 
         window.addEventListener('resize', () => {
