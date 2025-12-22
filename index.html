@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Magic Christmas 3D - Final Masterpiece</title>
+    <title>Magic Christmas 3D - Personal Edition</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -21,7 +21,7 @@
 </head>
 <body>
     <div id="ui-layer">
-        <div class="instructions">🖐 Xoay 360° | 🤏 Chụm: Xem ảnh | ✊ Nắm: Cây thông | ❤️ 2 tay: Trái tim</div><br>
+        <div class="instructions">🖐 Xoay 360° | 🤏 Chụm: Xem ảnh | ✊ Nắm: Cây thông | ❤️ 2 tay: Trái tim | 👌 Ok: Đào Thu Thuỷ</div><br>
         <button id="btnStart" onclick="startMagic()">BẮT ĐẦU PHÉP THUẬT</button>
     </div>
     <div id="copyright">© vandiep - Magic Christmas 2025</div>
@@ -34,7 +34,7 @@
         const MUSIC_URL = "./audio.mp3";
         
         let scene, camera, renderer, groupGold, groupRed, snowParticles, photoMeshes = [];
-        let starMesh, titleMesh, loveMesh;
+        let starMesh, titleMesh, loveMesh, nameMesh; // Thêm nameMesh
         let state = 'TREE', selectedIndex = 0, handX = 0.5, handY = 0.5;
         let bgMusic = new Audio(MUSIC_URL); bgMusic.loop = true;
 
@@ -42,15 +42,16 @@
             rotationRangeY: 10,
             rotationRangeX: 6,
             followSpeed: 0.2,
-            particleSpeed: 0.15
+            particleSpeed: 0.15,
+            zoomSpeed: 0.15 // Tốc độ zoom ảnh
         };
 
-        function createTextTexture(text, color) {
-            const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 128;
+        function createTextTexture(text, color, fontSize = 50) {
+            const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 256; // Tăng kích thước canvas cho chữ
             const ctx = canvas.getContext('2d');
-            ctx.font = 'bold 50px Arial'; ctx.fillStyle = color; ctx.textAlign = 'center';
+            ctx.font = `bold ${fontSize}px Arial`; ctx.fillStyle = color; ctx.textAlign = 'center';
             ctx.shadowColor = "black"; ctx.shadowBlur = 8;
-            ctx.fillText(text, 256, 80);
+            ctx.fillText(text, 512, 128 + (fontSize / 4)); // Căn chỉnh vị trí chữ
             return new THREE.CanvasTexture(canvas);
         }
 
@@ -71,30 +72,114 @@
             ctx.fillStyle = grd; ctx.fillRect(0, 0, 64, 64);
             const tex = new THREE.CanvasTexture(canvas);
 
-            const pTree = [], pExplode = [], pHeart = [], pos = [];
+            const pTree = [], pExplode = [], pHeart = [], pName = [], pos = []; // Thêm pName
+            
+            // Hàm trợ giúp để tạo vị trí hạt từ chữ hoặc hình
+            function createPointsFromCanvasText(text, color, scale = 1, charSize = 80, spacing = 1.2, heartOffset = 0) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = 1024; tempCanvas.height = 256;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.font = `bold ${charSize}px Arial`;
+                tempCtx.fillStyle = color;
+                tempCtx.textAlign = 'center';
+                tempCtx.textBaseline = 'middle';
+                tempCtx.fillText(text, tempCanvas.width / 2, tempCanvas.height / 2 + heartOffset);
+
+                const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                const data = imageData.data;
+                const points = [];
+                for (let x = 0; x < tempCanvas.width; x += Math.round(spacing * scale)) {
+                    for (let y = 0; y < tempCanvas.height; y += Math.round(spacing * scale)) {
+                        const i = (y * tempCanvas.width + x) * 4;
+                        if (data[i + 3] > 0) { // Nếu pixel có alpha > 0
+                            // Căn giữa chữ
+                            const px = (x - tempCanvas.width / 2) * scale;
+                            const py = (y - tempCanvas.height / 2) * scale;
+                            // Thêm độ dày ngẫu nhiên
+                            const pz = (Math.random() - 0.5) * 10; 
+                            points.push(px, py, pz);
+                        }
+                    }
+                }
+                return points;
+            }
+
+            // Tạo hình trái tim phẳng để tạo chữ Đào Thu Thủy
+            const tempHeartPoints = createPointsFromCanvasText("❤️", "red", 0.5, 100, 1.5, -10); // Scale nhỏ hơn cho icon
+            // Tạo chữ Đào Thu Thủy
+            const tempNamePoints = createPointsFromCanvasText("Đào Thu Thủy", "#ADD8E6", 0.3, 100, 1.0); // Scale nhỏ cho chữ tên
+
+            // Cần số lượng hạt để tạo hình chữ + trái tim
+            const totalNameParticles = tempNamePoints.length / 3;
+            const totalHeartIconParticles = tempHeartPoints.length / 3;
+
+            const TREE_PARTICLE_COUNT = Math.round(count * 0.4); // Chỉ 40% hạt cho cây thông
+            const NAME_PARTICLE_COUNT = totalNameParticles + totalHeartIconParticles; // Số hạt cho chữ + icon
+            const EXPLODE_PARTICLE_COUNT = count - TREE_PARTICLE_COUNT - NAME_PARTICLE_COUNT; // Số hạt còn lại cho explode
+
+            // Lấy hạt cho cây thông và khởi tạo ban đầu
             for (let i = 0; i < count; i++) {
+                // Dáng Cây thông
                 const h = Math.random() * 80, y = h - 40;
-                const r = (1 - (h / 80)) * 38 * Math.sqrt(Math.random());
+                const r = (1 - (h / 80)) * 30 * Math.sqrt(Math.random()); // Giảm bán kính cây thông
                 const t = Math.random() * Math.PI * 2;
                 pTree.push(r * Math.cos(t), y, r * Math.sin(t));
+
+                // Dáng Nổ tung (Quả cầu)
                 const phi = Math.acos(2 * Math.random() - 1), lam = 2 * Math.PI * Math.random();
                 const rad = 65 * Math.cbrt(Math.random());
                 pExplode.push(rad * Math.sin(phi) * Math.cos(lam), rad * Math.sin(phi) * Math.sin(lam), rad * Math.cos(phi));
+
+                // Dáng TRÁI TIM 3D
                 const th = Math.random() * Math.PI * 2;
-                const hx = 16 * Math.pow(Math.sin(th), 3), hy = 13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th);
-                pHeart.push(hx * 2.3, hy * 2.3 + 5, (Math.random() - 0.5) * 10);
+                const hx = 16 * Math.pow(Math.sin(th), 3);
+                const hy = 13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th);
+                const depth = (Math.random() - 0.5) * 15;
+                pHeart.push(hx * 2.2, hy * 2.2 + 5, depth); 
+
+                // Khởi tạo vị trí ban đầu
                 pos.push(pTree[i * 3], pTree[i * 3 + 1], pTree[i * 3 + 2]);
             }
+
+            // Phân bổ hạt cho chữ Đào Thu Thủy và trái tim
+            let currentNameParticleIndex = 0;
+            let currentHeartIconParticleIndex = 0;
+            for(let i = 0; i < count; i++) {
+                const isNameParticle = i < totalNameParticles;
+                const isHeartIconParticle = i >= totalNameParticles && i < NAME_PARTICLE_COUNT;
+
+                let px = 0, py = 0, pz = 0;
+
+                if (isNameParticle && currentNameParticleIndex < tempNamePoints.length / 3) {
+                    px = tempNamePoints[currentNameParticleIndex * 3] - 15; // Dịch chữ sang trái một chút
+                    py = tempNamePoints[currentNameParticleIndex * 3 + 1];
+                    pz = tempNamePoints[currentNameParticleIndex * 3 + 2];
+                    currentNameParticleIndex++;
+                } else if (isHeartIconParticle && currentHeartIconParticleIndex < tempHeartPoints.length / 3) {
+                    px = tempHeartPoints[currentHeartIconParticleIndex * 3] + 30; // Dịch icon sang phải
+                    py = tempHeartPoints[currentHeartIconParticleIndex * 3 + 1];
+                    pz = tempHeartPoints[currentHeartIconParticleIndex * 3 + 2];
+                    currentHeartIconParticleIndex++;
+                } else {
+                    // Nếu không đủ hạt để tạo chữ/icon, sử dụng explode
+                    px = pExplode[i * 3];
+                    py = pExplode[i * 3 + 1];
+                    pz = pExplode[i * 3 + 2];
+                }
+                 pName.push(px, py, pz);
+            }
+            
             const geo = new THREE.BufferGeometry();
             geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-            geo.userData = { tree: pTree, explode: pExplode, heart: pHeart };
+            geo.userData = { tree: pTree, explode: pExplode, heart: pHeart, name: pName }; // Thêm 'name' vào userData
+
             return new THREE.Points(geo, new THREE.PointsMaterial({ size, map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
         }
 
         function createSnow() {
             const snowGeo = new THREE.BufferGeometry();
             const snowPos = [];
-            for(let i=0; i<1000; i++) snowPos.push((Math.random()-0.5)*350, (Math.random()-0.5)*350, (Math.random()-0.5)*350);
+            for(let i=0; i<2000; i++) snowPos.push((Math.random()-0.5)*350, (Math.random()-0.5)*350, (Math.random()-0.5)*350); // Tăng số lượng tuyết lên 2000
             snowGeo.setAttribute('position', new THREE.Float32BufferAttribute(snowPos, 3));
             snowParticles = new THREE.Points(snowGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, transparent: true, opacity: 0.6 }));
             scene.add(snowParticles);
@@ -109,8 +194,8 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            groupGold = createParticleSystem('#FFD700', 1800, 2.3);
-            groupRed = createParticleSystem('#FF3333', 450, 3.5);
+            groupGold = createParticleSystem('#FFD700', 2000, 2.3); // Tăng tổng số hạt vàng
+            groupRed = createParticleSystem('#FF3333', 500, 3.5); // Tăng tổng số hạt đỏ
             scene.add(groupGold, groupRed);
 
             starMesh = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), new THREE.MeshBasicMaterial({ map: createStarTexture(), transparent: true, blending: THREE.AdditiveBlending }));
@@ -121,6 +206,11 @@
 
             loveMesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 15), new THREE.MeshBasicMaterial({ map: createTextTexture("I LOVE YOU ❤️", "#FF69B4"), transparent: true }));
             loveMesh.position.y = 48; loveMesh.visible = false; scene.add(loveMesh);
+            
+            // Chữ "Đào Thu Thủy" sẽ được tạo từ các hạt, không phải mesh phẳng nữa
+            // Tuy nhiên, bạn vẫn có thể dùng mesh nếu muốn một hiệu ứng khác
+            // nameMesh = new THREE.Mesh(new THREE.PlaneGeometry(100, 20), new THREE.MeshBasicMaterial({ map: createTextTexture("Đào Thu Thuỷ ❤️", "#ADD8E6", 80), transparent: true }));
+            // nameMesh.position.y = 0; nameMesh.visible = false; scene.add(nameMesh);
 
             createSnow();
             const loader = new THREE.TextureLoader();
@@ -143,86 +233,37 @@
 
             [groupGold, groupRed].forEach(g => {
                 const pos = g.geometry.attributes.position.array;
-                const target = g.geometry.userData[state.toLowerCase()] || g.geometry.userData.explode;
+                const target = g.geometry.userData[state.toLowerCase()] || g.geometry.userData.explode; // Lấy target shape
                 for (let i = 0; i < pos.length; i++) pos[i] += (target[i] - pos[i]) * SENSITIVITY.particleSpeed;
                 g.geometry.attributes.position.needsUpdate = true;
 
-                if (state === 'TREE') {
+                if (state === 'TREE' || state === 'NAME') { // Cây thông và tên sẽ xoay chậm
                     g.rotation.y += 0.015; g.rotation.x *= 0.9;
-                } else {
+                } else { // Các trạng thái khác sẽ xoay theo tay
                     g.rotation.y += (targetRotY - g.rotation.y) * SENSITIVITY.followSpeed;
                     g.rotation.x += (targetRotX - g.rotation.x) * SENSITIVITY.followSpeed;
                 }
             });
 
             starMesh.scale.setScalar(1 + Math.sin(Date.now()*0.005)*0.25);
-            starMesh.visible = (state === 'TREE');
-            titleMesh.visible = (state === 'TREE');
-            loveMesh.visible = (state === 'HEART');
+            starMesh.visible = (state === 'TREE'); // Ngôi sao chỉ hiển thị khi là cây thông
+            titleMesh.visible = (state === 'TREE'); // Chữ Merry Christmas chỉ hiển thị khi là cây thông
+            loveMesh.visible = (state === 'HEART'); // Chữ I LOVE YOU chỉ hiển thị khi là trái tim
+
+            // Nếu đang ở trạng thái trái tim, xoay chữ LOVE YOU hướng về camera
+            if (state === 'HEART') {
+                loveMesh.lookAt(camera.position);
+            }
+            
+            // Nếu đang ở trạng thái tên, xoay chữ NAME hướng về camera (nếu dùng mesh)
+            // if (nameMesh) nameMesh.visible = (state === 'NAME');
+            // if (state === 'NAME' && nameMesh) {
+            //     nameMesh.lookAt(camera.position);
+            // }
 
             let minZ = 1000, nearIdx = selectedIndex;
             photoMeshes.forEach((m, i) => {
                 if (state === 'EXPLODE' || state === 'PHOTO') {
                     if (state === 'EXPLODE') {
                         m.visible = true;
-                        const phi = Math.acos(-1 + (2 * i) / photoMeshes.length);
-                        const theta = Math.sqrt(photoMeshes.length * Math.PI) * phi;
-                        const p = new THREE.Vector3(Math.cos(theta)*Math.sin(phi), Math.sin(theta)*Math.sin(phi), Math.cos(phi)).multiplyScalar(45);
-                        p.applyEuler(groupGold.rotation);
-                        m.position.lerp(p, SENSITIVITY.followSpeed);
-                        m.lookAt(camera.position); m.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
-                        let dist = m.position.distanceTo(camera.position);
-                        if (dist < minZ) { minZ = dist; nearIdx = i; }
-                    } else if (state === 'PHOTO' && i === selectedIndex) {
-                        m.visible = true; m.position.lerp(new THREE.Vector3(0, 5, 85), 0.2);
-                        m.scale.lerp(new THREE.Vector3(5.5, 5.5, 1), 0.2); m.lookAt(camera.position);
-                    } else { m.visible = false; m.scale.set(0,0,0); }
-                } else { m.visible = false; }
-            });
-            if (state === 'EXPLODE') selectedIndex = nearIdx;
-            renderer.render(scene, camera);
-        }
-
-        async function startMagic() {
-            document.getElementById('btnStart').style.display = 'none';
-            bgMusic.play().catch(e => console.log("Audio play failed, waiting for interaction"));
-            init3D();
-            const video = document.querySelector('.input_video');
-            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-            hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-
-            hands.onResults(results => {
-                const canvas = document.getElementById('camera-preview');
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0,0,canvas.width, canvas.height);
-                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-
-                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                    if (results.multiHandLandmarks.length === 2) {
-                        const h1 = results.multiHandLandmarks[0], h2 = results.multiHandLandmarks[1];
-                        // Chạm hai ngón trỏ để tạo trái tim
-                        if (Math.hypot(h1[8].x - h2[8].x, h1[8].y - h2[8].y) < 0.12) { state = 'HEART'; return; }
-                    }
-                    const lm = results.multiHandLandmarks[0];
-                    handX = lm[9].x; handY = lm[9].y;
-                    const pinch = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
-                    const isFist = Math.hypot(lm[8].x - lm[0].x, lm[8].y - lm[0].y) < 0.25;
-
-                    if (isFist) state = 'TREE';
-                    else if (pinch < 0.06) state = 'PHOTO';
-                    else state = 'EXPLODE';
-                } else { state = 'TREE'; }
-            });
-
-            const cam = new Camera(video, { onFrame: async () => { await hands.send({image: video}); }, width: 640, height: 480 });
-            cam.start();
-        }
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
-</body>
-</html>
+                        const phi = Math.acos(-1 + (2 * i) / photoMeshes.
