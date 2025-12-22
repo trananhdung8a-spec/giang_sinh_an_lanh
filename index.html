@@ -270,7 +270,7 @@
             const borderGeo = new THREE.PlaneGeometry(9, 9); 
             const borderMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 }); 
 
-            for(let i=0; i<10; i++) {
+            for(let i=0; i<5; i++) {
                 const mat = new THREE.MeshBasicMaterial({ map: photoTextures[i], side: THREE.DoubleSide });
                 const mesh = new THREE.Mesh(geo, mat);
                 const border = new THREE.Mesh(borderGeo, borderMat);
@@ -388,7 +388,7 @@
             } else {
                 // EXPLODE
                 group.scale.set(1,1,1);
-                group.rotation.y += (handRotY - group.rotation.y) * 0.2;
+                group.rotation.y += (handRotY - group.rotation.y) * 0.1;
 
                 // size, color
                 for(let i=0; i<count; i++) {
@@ -410,7 +410,7 @@
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
             const speed = 0.08;
-            const handRotY = (handX - 0.5) * 8.0;
+            const handRotY = (handX - 0.5) * 4.0;
 
             updateParticleGroup(groupGold, 'gold', state, speed, handRotY, time);
             updateParticleGroup(groupRed, 'red', state, speed, handRotY, time);
@@ -519,7 +519,7 @@
             });
 
             const cameraUtils = new window.Camera(video, {
-                onFrame: async () => { await hands.send({image: video}); }, width: 1280, height: 720
+                onFrame: async () => { await hands.send({image: video}); }, width: 640, height: 480
             });
             cameraUtils.start();
         }
@@ -530,4 +530,3 @@
     </script>
 </body>
 </html>
-
